@@ -24,7 +24,7 @@ def initialize_models():
         with st.spinner("🚀 Loading FREE AI models (first time only)..."):
             try:
                 # Configure FREE Google Gemini
-                genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+                genai.configure(api_key=st.secrets["AIzaSyDATBQKVZQFNo8j9aLXz6e105bZQ3VikC4"])
                 st.session_state.model = genai.GenerativeModel('gemini-pro')
                 
                 # Load FREE embedding model
