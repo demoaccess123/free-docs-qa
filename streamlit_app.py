@@ -18,7 +18,7 @@ def initialize_app():
         with st.spinner("🚀 Initializing FREE AI..."):
             try:
                 # Configure FREE Google Gemini
-                genai.configure(api_key=st.secrets["AIzaSyDATBQKVZQFNo8j9aLXz6e105bZQ3VikC4"])
+                genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
                 st.session_state.model = genai.GenerativeModel('gemini-pro')
                 st.session_state.documents = []
                 st.session_state.initialized = True
