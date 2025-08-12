@@ -19,7 +19,7 @@ def initialize_app():
             try:
                 # Configure FREE Google Gemini
                 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-                st.session_state.model = genai.GenerativeModel('gemini-pro')
+                st.session_state.model = genai.GenerativeModel('gemini-1.5-flash')
                 st.session_state.documents = []
                 st.session_state.initialized = True
                 st.success("✅ Ready to use!")
