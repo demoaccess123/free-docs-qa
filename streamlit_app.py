@@ -1,6 +1,5 @@
 import streamlit as st
 import google.generativeai as genai
-from sentence_transformers import SentenceTransformer
 import chromadb
 from langchain.document_loaders import PyPDFLoader, TextLoader
 from langchain.text_splitter import CharacterTextSplitter
@@ -17,20 +16,18 @@ st.set_page_config(
 # Initialize session state
 if 'initialized' not in st.session_state:
     st.session_state.initialized = False
+    st.session_state.documents = []
 
 def initialize_models():
-    """Initialize all FREE models"""
+    """Initialize FREE models"""
     if not st.session_state.initialized:
-        with st.spinner("🚀 Loading FREE AI models (first time only)..."):
+        with st.spinner("🚀 Initializing FREE AI models..."):
             try:
                 # Configure FREE Google Gemini
                 genai.configure(api_key=st.secrets["AIzaSyDATBQKVZQFNo8j9aLXz6e105bZQ3VikC4"])
                 st.session_state.model = genai.GenerativeModel('gemini-pro')
                 
-                # Load FREE embedding model
-                st.session_state.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-                
-                # Initialize FREE ChromaDB
+                # Initialize FREE ChromaDB (simple version)
                 st.session_state.chroma_client = chromadb.Client()
                 
                 try:
@@ -39,15 +36,32 @@ def initialize_models():
                     st.session_state.collection = st.session_state.chroma_client.create_collection("docs")
                 
                 st.session_state.initialized = True
-                st.success("✅ FREE AI models loaded successfully!")
+                st.success("✅ FREE AI ready to use!")
                 
             except Exception as e:
-                st.error(f"❌ Error initializing: {e}")
+                st.error(f"❌ Error: {e}")
                 st.stop()
+
+def simple_embedding(text):
+    """Simple text embedding using character frequency"""
+    # Create a simple numerical representation of text
+    chars = "abcdefghijklmnopqrstuvwxyz "
+    vector = []
+    text = text.lower()
+    
+    for char in chars:
+        count = text.count(char)
+        vector.append(count / len(text) if len(text) > 0 else 0)
+    
+    # Pad or trim to consistent length
+    while len(vector) < 100:
+        vector.append(0.0)
+    
+    return vector[:100]
 
 def main():
     st.title("📚 100% FREE Internal Docs Q&A Agent")
-    st.markdown("### 💰 Zero cost • 🚀 Powered by Google Gemini & Open Source AI")
+    st.markdown("### 💰 Zero cost • 🚀 Powered by Google Gemini")
     
     # Initialize models
     initialize_models()
@@ -68,9 +82,8 @@ def main():
         st.markdown("---")
         
         # Stats
-        if st.session_state.initialized:
-            doc_count = st.session_state.collection.count()
-            st.metric("📊 Documents Processed", doc_count)
+        doc_count = len(st.session_state.documents)
+        st.metric("📊 Documents Processed", doc_count)
             
         st.markdown("### 💡 Sample Questions")
         st.markdown("""
@@ -78,16 +91,6 @@ def main():
         - How do I submit expenses?
         - What are the security rules?
         - Where is the style guide?
-        """)
-        
-        st.markdown("---")
-        st.markdown("### 🎉 100% FREE Stack")
-        st.markdown("""
-        - 🧠 **Google Gemini** (Free API)
-        - 🔍 **SentenceTransformers** (Free)
-        - 💾 **ChromaDB** (Free)
-        - ☁️ **Streamlit Cloud** (Free)
-        - 💰 **Total Cost: $0/month**
         """)
 
     # Main chat area
@@ -117,7 +120,7 @@ def main():
                 st.session_state.messages.append({"role": "assistant", "content": response})
 
 def process_document(uploaded_file):
-    """Process uploaded document with FREE models"""
+    """Process uploaded document"""
     try:
         with st.spinner("📖 Processing document..."):
             # Save temp file
@@ -137,20 +140,15 @@ def process_document(uploaded_file):
             text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
             chunks = text_splitter.split_documents(docs)
             
-            # Generate embeddings
-            texts = [doc.page_content for doc in chunks]
-            embeddings = st.session_state.embedding_model.encode(texts).tolist()
-            
-            # Store in ChromaDB
-            ids = [str(uuid.uuid4()) for _ in range(len(texts))]
-            metadatas = [{"source": uploaded_file.name, "chunk": i} for i in range(len(texts))]
-            
-            st.session_state.collection.add(
-                embeddings=embeddings,
-                documents=texts,
-                metadatas=metadatas,
-                ids=ids
-            )
+            # Store in session state (simple approach)
+            for i, chunk in enumerate(chunks):
+                doc_data = {
+                    'text': chunk.page_content,
+                    'source': uploaded_file.name,
+                    'chunk': i,
+                    'embedding': simple_embedding(chunk.page_content)
+                }
+                st.session_state.documents.append(doc_data)
             
             os.unlink(tmp_file_path)
             
@@ -165,22 +163,29 @@ def get_answer(question):
     """Get answer using FREE models"""
     try:
         # Check if documents exist
-        if st.session_state.collection.count() == 0:
+        if not st.session_state.documents:
             return "❌ Please upload some documents first!"
         
-        # Search documents
-        question_embedding = st.session_state.embedding_model.encode([question]).tolist()[0]
-        results = st.session_state.collection.query(
-            query_embeddings=[question_embedding],
-            n_results=3
-        )
+        # Simple similarity search
+        question_embedding = simple_embedding(question)
         
-        if not results['documents']:
-            return "🤔 No relevant information found in your documents."
+        # Find most similar documents (simple approach)
+        similarities = []
+        for doc in st.session_state.documents:
+            # Simple cosine similarity
+            similarity = sum(a * b for a, b in zip(question_embedding, doc['embedding']))
+            similarities.append((similarity, doc))
+        
+        # Get top 3 most similar
+        similarities.sort(reverse=True)
+        top_docs = similarities[:3]
+        
+        if not top_docs:
+            return "🤔 No relevant information found."
         
         # Create context
-        context = "\n\n".join(results['documents'])
-        sources = [f"📄 {meta['source']}" for meta in results['metadatas']]
+        context = "\n\n".join([doc['text'] for _, doc in top_docs])
+        sources = [f"📄 {doc['source']}" for _, doc in top_docs]
         
         # Ask Gemini
         prompt = f"""Based on these documents, answer the question:
